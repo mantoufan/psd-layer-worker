@@ -12,3 +12,4 @@ scipy==1.13.1
 requests==2.32.3
 simple-lama-inpainting==0.1.2
 huggingface-hub==0.24.6
+hf_transfer==0.1.8

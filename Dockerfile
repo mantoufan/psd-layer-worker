@@ -2,10 +2,13 @@
 # CUDA 12.1 + Python 3.10 + Node 20 (for ag-psd PSD assembly). Model weights are baked in.
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
+# HF_HUB_ENABLE_HF_TRANSFER=1 → xet-aware parallel downloads (~42MB/s) so the in-build weight bake
+# doesn't crawl on a bad-peering build host. Built on c.y1 (no build-time limit), NOT RunPod's GitHub
+# builder (30-min cap can't bake a torch+weights image — see memory madfan-image-bake-cy1).
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/root/.cache/huggingface \
-    HF_HUB_ENABLE_HF_TRANSFER=0 \
+    HF_HUB_ENABLE_HF_TRANSFER=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
