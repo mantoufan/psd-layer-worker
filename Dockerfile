@@ -21,9 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# --- Python deps (CUDA torch from the cu121 index) ---
+# --- Python deps (CUDA torch from the cu124 index) ---
+# cu124 wheels ship sm_89 (Ada: RTX 4090 / L4) kernels in addition to sm_86 (Ampere: 3090/A5000/
+# A40/A6000). cu121 lacks sm_89 → "no kernel image available for execution on the device" on Ada
+# cards. cu124 works across every GPU type this endpoint can land on.
 COPY requirements.txt .
-RUN pip install --index-url https://download.pytorch.org/whl/cu121 torch==2.4.1 torchvision==0.19.1 \
+RUN pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.4.1 torchvision==0.19.1 \
     && pip install -r requirements.txt
 
 # --- Node deps (ag-psd) ---
