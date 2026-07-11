@@ -1,0 +1,8 @@
+{
+  "name": "psd-layer-worker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ag-psd": "^31.0.0"
+  }
+}
