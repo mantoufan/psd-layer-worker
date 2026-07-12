@@ -1,42 +1,39 @@
 # Layered-PSD RunPod serverless worker.
-# CUDA 12.1 + Python 3.10 + Node 20 (for ag-psd PSD assembly). Model weights are baked in.
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+# Base = the OFFICIAL PyTorch image (torch+torchvision+CUDA are pre-installed and TESTED to run on
+# RunPod's GPUs) — a hand-rolled nvidia/cuda + `pip install torch` combo produced "no kernel image
+# available for execution on the device" on every card, so we defer to the known-good build.
+# cuda12.4 base → keep the endpoint's allowedCudaVersions at >=12.4.
+FROM pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime
 
-# HF_HUB_ENABLE_HF_TRANSFER=1 → xet-aware parallel downloads (~42MB/s) so the in-build weight bake
-# doesn't crawl on a bad-peering build host. Built on c.y1 (no build-time limit), NOT RunPod's GitHub
-# builder (30-min cap can't bake a torch+weights image — see memory madfan-image-bake-cy1).
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/root/.cache/huggingface \
     HF_HUB_ENABLE_HF_TRANSFER=1 \
     PIP_NO_CACHE_DIR=1
 
+# System deps + Node 20 (for ag-psd PSD assembly).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3-pip git curl ca-certificates \
-    libgl1 libglib2.0-0 \
+    git curl ca-certificates libgl1 libglib2.0-0 \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.10 /usr/bin/python
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# --- Python deps (CUDA torch from the cu124 index) ---
-# cu124 wheels ship sm_89 (Ada: RTX 4090 / L4) kernels in addition to sm_86 (Ampere: 3090/A5000/
-# A40/A6000). cu121 lacks sm_89 → "no kernel image available for execution on the device" on Ada
-# cards. cu124 works across every GPU type this endpoint can land on.
+# --- Python deps (torch/torchvision already in the base image; requirements.txt must NOT pin them) ---
 COPY requirements.txt .
-RUN pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.4.1 torchvision==0.19.1 \
-    && pip install -r requirements.txt
+RUN pip install -r requirements.txt
 
 # --- Node deps (ag-psd) ---
-COPY package.json .
+COPY package.json package-lock.json ./
 RUN npm install --omit=dev
 
-# --- App code ---
-COPY pipeline.py rp_handler.py assemble_psd.mjs download_models.py ./
-
-# --- Bake model weights into the image (no per-cold-start download) ---
+# --- Bake model weights (download-only; no model instantiation → safe on the build host's CPU). ---
+# Ordered BEFORE the app-code COPY so editing pipeline/handler code does NOT re-download the ~4GB.
+COPY download_models.py .
 RUN python download_models.py
+
+# --- App code (last, so code-only edits rebuild in seconds) ---
+COPY pipeline.py rp_handler.py assemble_psd.mjs ./
 
 CMD ["python", "-u", "rp_handler.py"]

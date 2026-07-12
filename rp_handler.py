@@ -27,6 +27,18 @@ def _put(url, data, content_type):
 def handler(job):
     t0 = time.time()
     inp = job.get("input", {}) or {}
+
+    # Diagnostic mode: report torch/GPU facts without loading models (for debugging arch/driver issues).
+    if inp.get("diag"):
+        import torch
+        return {
+            "torch": torch.__version__,
+            "cuda": torch.version.cuda,
+            "cuda_available": torch.cuda.is_available(),
+            "arch_list": torch.cuda.get_arch_list() if torch.cuda.is_available() else None,
+            "device_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "capability": list(torch.cuda.get_device_capability(0)) if torch.cuda.is_available() else None,
+        }
     image_url = inp.get("image_url")
     psd_put_url = inp.get("psd_put_url")
     if not image_url or not psd_put_url:
