@@ -22,18 +22,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# --- Python deps (torch/torchvision already in the base image; requirements.txt must NOT pin them) ---
+# --- Bake model weights FIRST (download-only; needs just hf hub + hf_transfer). Isolated from the
+#     requirements layer so editing deps/app-code does NOT re-download the ~4GB of weights. ---
+RUN pip install huggingface_hub==0.24.6 hf_transfer==0.1.8
+COPY download_models.py .
+RUN python download_models.py
+
+# --- Python deps (torch/torchvision are in the base image; requirements.txt must NOT pin them) ---
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # --- Node deps (ag-psd) ---
 COPY package.json package-lock.json ./
 RUN npm install --omit=dev
-
-# --- Bake model weights (download-only; no model instantiation → safe on the build host's CPU). ---
-# Ordered BEFORE the app-code COPY so editing pipeline/handler code does NOT re-download the ~4GB.
-COPY download_models.py .
-RUN python download_models.py
 
 # --- App code (last, so code-only edits rebuild in seconds) ---
 COPY pipeline.py rp_handler.py assemble_psd.mjs ./

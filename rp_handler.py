@@ -59,8 +59,11 @@ def handler(job):
         manifest = {"width": W, "height": H, "layers": []}
         for i, lyr in enumerate(result["layers"]):
             fn = os.path.join(td, f"L{i}.rgba")
-            lyr["rgba"].astype(np.uint8).tofile(fn)
-            manifest["layers"].append({"name": lyr["name"], "w": W, "h": H, "file": fn})
+            arr = lyr["rgba"].astype(np.uint8)
+            arr.tofile(fn)
+            lh, lw = arr.shape[0], arr.shape[1]  # cropped dims (subject layers are tight-boxed)
+            manifest["layers"].append({"name": lyr["name"], "w": lw, "h": lh,
+                                       "left": int(lyr.get("left", 0)), "top": int(lyr.get("top", 0)), "file": fn})
         mpath = os.path.join(td, "manifest.json")
         json.dump(manifest, open(mpath, "w"))
         opath = os.path.join(td, "out.psd")

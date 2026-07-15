@@ -8,8 +8,8 @@ const man = JSON.parse(readFileSync(manifestPath, "utf8"));
 
 const children = man.layers.map((l) => ({
   name: l.name,
-  left: 0,
-  top: 0,
+  left: l.left || 0,
+  top: l.top || 0,
   imageData: { data: new Uint8ClampedArray(readFileSync(l.file)), width: l.w, height: l.h },
 }));
 

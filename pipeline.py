@@ -135,16 +135,22 @@ def process(image_url, subjects, max_subjects=6, box_threshold=0.30):
         alpha = (matte * inst).clip(0, 1)
         if float(alpha.mean()) < 0.002:   # skip near-empty
             continue
-        rgba = np.dstack([rgb, (alpha * 255).astype(np.uint8)])
-        layers.append({"name": d["label"], "score": d["score"], "rgba": rgba})
+        # Crop the subject layer to its content bounding box — a full-canvas RGBA where the subject
+        # occupies a small region wastes most of the PSD on transparent pixels (huge file, slow
+        # ag-psd write + upload). Store the tight crop + its (left, top) so it composites in place.
+        a8 = (alpha * 255).astype(np.uint8)
+        ys, xs = np.where(a8 > 0)
+        x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
+        rgba = np.dstack([rgb[y0:y1, x0:x1], a8[y0:y1, x0:x1]])
+        layers.append({"name": d["label"], "score": d["score"], "rgba": rgba, "left": x0, "top": y0})
 
-    # background: LaMa inpaint the dilated union of subject masks
+    # background: LaMa inpaint the dilated union of subject masks (kept full-canvas + opaque)
     from scipy.ndimage import binary_dilation
     hole = binary_dilation(union, iterations=max(3, (W + H) // 600))
     bg = _models["lama"](img, Image.fromarray((hole * 255).astype(np.uint8)))
     bg = bg.convert("RGB").resize((W, H))
     bg_rgba = np.dstack([np.asarray(bg), np.full((H, W), 255, np.uint8)])
 
-    ordered = [{"name": "background", "rgba": bg_rgba}] + list(reversed(layers))
+    ordered = [{"name": "background", "rgba": bg_rgba, "left": 0, "top": 0}] + list(reversed(layers))
     return {"canvas": [W, H], "layers": ordered,
             "subjects": [{"name": l["name"], "score": round(l.get("score", 1.0), 3)} for l in layers]}
